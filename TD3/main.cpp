@@ -72,6 +72,9 @@ Vector operator/(const Vector& a, const double b) {
 double dot(const Vector& a, const Vector& b) {
     return a[0] * b[0] + a[1] * b[1];
 }
+double cross(const Vector& a, const Vector& b){
+    return a[0]*b[1] - a[1]*b[0];
+}
 
 
 class Polygon {
@@ -79,9 +82,19 @@ public:
 
     double area() {
         if (vertices.size() < 3) return 0;
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the area of the polygon
-        return -111;
+
+        double A = 0.0;
+
+        for (int i = 0; i < vertices.size()-1; i++){
+            Vector vi = vertices[i];
+            Vector vip1 = vertices[i+1];
+            A+= vi[0]*vip1[1] - vip1[0]*vi[1];
+        }
+
+        A = 1/2 * std::abs(A);
+        return A;
     }
 
     Vector centroid() {
@@ -95,10 +108,29 @@ public:
     double integral_square_distance(const Vector& Pi) {
         if (vertices.size() < 3) return 0;
 
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the integral of ||x-Pi||^2 over the polygon
 
-        return -111;
+        double integral = 0.0;
+
+        //decompose the polygon into triangles
+        for (int i = 0; i < vertices.size(); i++){
+            Vector triangle[3] = {vertices[0], vertices[i], vertices[i+1]};
+            
+            double T = 1/2 * std::abs(cross(triangle[1] - triangle[0], triangle[2] - triangle[0]));
+            //compute sum for this triangle
+            for (int k = 0; k < 3; k++){
+            for (int l = 0; l < 3; l++){
+                integral += dot(triangle[k] - Pi, triangle[l] - Pi);
+            }
+
+            integral *= (T/6);
+        }
+        }
+
+
+        // sum all integrals of the triangles 
+        return integral;    
     }
 
     std::vector<Vector> vertices;
@@ -213,6 +245,9 @@ public:
         //      For all other sites Pj (optionally, only k nearest neighbors) :
         //          Clip it with bisector of [Pi,Pj]
 
+        //size weights
+        weights.resize(points.size());
+
         //size of cells 
         cells.resize(points.size());
 
@@ -229,7 +264,7 @@ public:
             cell.vertices.push_back(Vector(0,1));
 
             //lab1 : weights = 0
-            double wi = 0.0;
+            double wi = weights[i];
 
             //clip cell Pi with all other bisectors [Pi, Pj]
             for (int j = 0; j < points.size(); j++){
@@ -239,7 +274,7 @@ public:
                 }
 
                 Vector Pj = points[j];
-                double wj = 0.0;
+                double wj = weights[j];
 
                 //keep only side closer to Pi than to Pj
                 cell = clip_by_bisector(cell, Pi, Pj, wi, wj);
@@ -312,6 +347,7 @@ public:
 
             //find center of P0, Pi
             Vector M = (P0 + Pi) / 2.0;
+            Vector M_prime = M + (Pi - P0) * ((w0 - wi) / (2 * (P0 - Pi).norm2()));
 
             //find direction of mediator
             Vector normal = Pi - P0;
@@ -323,7 +359,7 @@ public:
             double denominator = dot(curVertex - prevVertex, normal);
 
             if (std::abs(denominator) > 1e-10){
-                double t = dot(M - prevVertex, normal) / denominator;
+                double t = dot(M_prime - prevVertex, normal) / denominator;
                 intersection = prevVertex + t *(curVertex - prevVertex);
             }
 
@@ -397,6 +433,14 @@ static lbfgsfloatval_t evaluate(
     lbfgsfloatval_t fx = 0.0;
     // g[i] = ...
     // fx = ...
+
+    double sum = 0.0;
+    for (int i = 0; i < ot->vor.cells.size(); i++){
+        sum += 1/n * ot->vor.weights[i];
+        fx += ot->vor.cells[i].integral_square_distance(ot->vor.points[i]) - ot->vor.cells[i].area();
+        g[i] = 1/n - ot->vor.cells[i].area();
+    }
+    fx += sum;
 
     return fx;
 }
@@ -522,6 +566,7 @@ int main() {
     v.points.push_back(Vector(0.6, 0.4));
     v.points.push_back(Vector(0.5, 0.7));
     v.points.push_back(Vector(0.2, 0.5));
+
 
     v.compute();
 
