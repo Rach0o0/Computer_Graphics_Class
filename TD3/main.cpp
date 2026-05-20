@@ -11,10 +11,19 @@
 #include "lbfgs.h"
 
 /*
-Voronoi diagram
-- for each point, we build the cell corrspondant (region of nearest points)
+Voronoi diagram:
+many points in a square --> 
+for every point, which region of the square is closer to this point than to any other point?
+point -> its region (voronoi cell)
 
+Polygon clipping:
+for one point, we don't know its final cell
+we start with the whole square
+- we compare Pi with another point Pj, there is a line in the middle btwn Pi and Pj (bisector)
+--> separate the plan in 2 sides (closer to Pi / closer to Pj)
 
+Sutherland-Hodgman
+algorithm to cut a polygon by a line (half-space)
 
 */
 
@@ -204,7 +213,47 @@ public:
         //      For all other sites Pj (optionally, only k nearest neighbors) :
         //          Clip it with bisector of [Pi,Pj]
 
-        
+        //size of cells 
+        cells.resize(points.size());
+
+    #pragma omp parallel for schedule(dynamic)
+        for (int i= 0; i < points.size(); i++){
+            //current point Pi
+            Vector Pi = points[i];
+
+            //unit square [0,1] * [0,1]
+            Polygon cell;
+            cell.vertices.push_back(Vector(0,0));
+            cell.vertices.push_back(Vector(1,0));
+            cell.vertices.push_back(Vector(1,1));
+            cell.vertices.push_back(Vector(0,1));
+
+            //lab1 : weights = 0
+            double wi = 0.0;
+
+            //clip cell Pi with all other bisectors [Pi, Pj]
+            for (int j = 0; j < points.size(); j++){
+                //i different from j
+                if (i == j){
+                    continue;
+                }
+
+                Vector Pj = points[j];
+                double wj = 0.0;
+
+                //keep only side closer to Pi than to Pj
+                cell = clip_by_bisector(cell, Pi, Pj, wi, wj);
+
+                //if cell empty no need to continue
+                if (cell.vertices.empty()){
+                    break;
+                }
+            }
+
+            //store voronoi cell of Pi
+            cells[i] = cell; 
+
+        }
 
 
 
@@ -230,29 +279,67 @@ public:
         // Clip a polygon by the bisector of the segment defined by P0 (the current site of the Voronoi cell being computed) and Pi (another site)
         
         /*
-        Sutherland-Hodgman polygon clipping 
-        -> clip subject polygon by an infinite line, it is repeated for all edges of the convex clip polygon
-
-        To clip a polygon by a line: 
-        algo traverses all edges and progressively builds a new updated polygon
-        edge E -> outside of halfspace of interest (ignored) or inside (added to the new polygon) or partly inside (only part of this edge is added)
-
+        we want to build the cell of P0
+        For a point Pi, we keep only points x such that : distance(x, P0) <= distance(x, Pi)
         */
         
         Polygon outPolygon;
 
-        //w1 = w0 = 0 in lab 1
+        //wi = w0 = 0 in lab 1
+        //weights associated to points
 
-        for (int i = 0; i < V.vertices.size()-1; i++ ){
+        if (V.vertices.empty()){
+            return outPolygon;
+        }
+
+        for (int i = 0; i < V.vertices.size(); i++ ){
             //for each vertex of the subject polygon
 
             //test the subject polygon edge with vertices (i-1, i)
             Vector curVertex = V.vertices[i];
             Vector prevVertex = V.vertices[(i>0)?(i-1):(V.vertices.size()-1)];
 
-            //compute intersection btwn the infinite line supported by clipEdge and edge (i-1, i)
-            Vector intersection = 
+            //check if curVertex is inside 
+            // ||curVertex - P0|^2 - w0 <= ||curVErtex - Pi||^2 - wi 
+            double curDistance0 = (curVertex - P0).norm2() - w0;
+            double curDistancei = (curVertex - Pi).norm2() - wi; 
+            bool curInside = curDistance0 <= curDistancei;
+
+            //same for prevVertex
+            double prevDistance0 = (prevVertex - P0).norm2() - w0;
+            double prevDistancei = (prevVertex - Pi).norm2() - wi; 
+            bool prevInside = prevDistance0 <= prevDistancei;
+
+            //find center of P0, Pi
+            Vector M = (P0 + Pi) / 2.0;
+
+            //find direction of mediator
+            Vector normal = Pi - P0;
+
+            //find intersection btwn [prevVertex, curVertex] and bisector of [P0, Pi]
+            // P = A + t * (B-A)
+            Vector intersection;
+
+            double denominator = dot(curVertex - prevVertex, normal);
+
+            if (std::abs(denominator) > 1e-10){
+                double t = dot(M - prevVertex, normal) / denominator;
+                intersection = prevVertex + t *(curVertex - prevVertex);
+            }
+
+            if (curInside){
+                if(!prevInside){
+                    outPolygon.vertices.push_back(intersection);
+                }
+                outPolygon.vertices.push_back(curVertex);
+            }
+            else if (prevInside){
+                outPolygon.vertices.push_back(intersection);
+            }
+
         }
+
+        return outPolygon;
 
 
         
@@ -265,9 +352,6 @@ public:
 
         // TODO Lab 2 (Semi-Discrete Optimal Transport) : extend to Laguerre cells, i.e., w0 != w1
 
-        Polygon result;
-
-        return result;
     }
 
     std::vector<Vector> points;    // Lab 1 (Voronoi) : the sites to consider
@@ -415,13 +499,9 @@ void save_svg(const std::vector<Polygon>& polygons, std::string filename, const 
 
 
 
-
-
-
-
-
 int main() {
 
+    //show a polygon
     Polygon p;
     p.vertices.push_back(Vector(0.1, 0.2));
     p.vertices.push_back(Vector(0.6, 0.4));
@@ -431,8 +511,22 @@ int main() {
     std::vector<Polygon> s;
     s.push_back(p);
 
+    /*
     save_frame(s, "toto");
     save_svg(s, "toto.svg");
+    */
+
+    //VORONOI DIARGAM
+    VoronoiDiagram v;
+    v.points.push_back(Vector(0.1, 0.2));
+    v.points.push_back(Vector(0.6, 0.4));
+    v.points.push_back(Vector(0.5, 0.7));
+    v.points.push_back(Vector(0.2, 0.5));
+
+    v.compute();
+
+    save_svg(v.cells, "voronoi.svg", &v.points, "none");
+
     return 0;
 }
 
