@@ -87,13 +87,14 @@ public:
 
         double A = 0.0;
 
-        for (int i = 0; i < vertices.size()-1; i++){
+        for (int i = 0; i < vertices.size(); i++){
             Vector vi = vertices[i];
-            Vector vip1 = vertices[i+1];
+            //i forgot the last segment so i need to add one step with vertices[-1]
+            Vector vip1 = vertices[(i+1) % vertices.size()]; //don't forget last segment vertices[-1] -- vertices[0]
             A+= vi[0]*vip1[1] - vip1[0]*vi[1];
         }
 
-        A = 1/2 * std::abs(A);
+        A = 0.5 * std::abs(A);
         return A;
     }
 
@@ -114,18 +115,20 @@ public:
         double integral = 0.0;
 
         //decompose the polygon into triangles
-        for (int i = 0; i < vertices.size(); i++){
+        for (int i = 0; i < vertices.size() -1; i++){
             Vector triangle[3] = {vertices[0], vertices[i], vertices[i+1]};
             
-            double T = 1/2 * std::abs(cross(triangle[1] - triangle[0], triangle[2] - triangle[0]));
+            double T = 0.5 * std::abs(cross(triangle[1] - triangle[0], triangle[2] - triangle[0]));
             //compute sum for this triangle
+            
+            double sum = 0.0;
             for (int k = 0; k < 3; k++){
-            for (int l = 0; l < 3; l++){
-                integral += dot(triangle[k] - Pi, triangle[l] - Pi);
-            }
+                for (int l = 0; l < 3; l++){
+                    sum += dot(triangle[k] - Pi, triangle[l] - Pi);
+                }
 
-            integral *= (T/6);
-        }
+            }
+            integral += (T/6.0) * sum;
         }
 
 
@@ -434,13 +437,18 @@ static lbfgsfloatval_t evaluate(
     // g[i] = ...
     // fx = ...
 
-    double sum = 0.0;
+    
     for (int i = 0; i < ot->vor.cells.size(); i++){
-        sum += 1/n * ot->vor.weights[i];
-        fx += ot->vor.cells[i].integral_square_distance(ot->vor.points[i]) - ot->vor.cells[i].area();
-        g[i] = 1/n - ot->vor.cells[i].area();
+        double lambda = 1.0 / n;
+        double area = ot->vor.cells[i].area();
+        double integral = ot->vor.cells[i].integral_square_distance(ot->vor.points[i]);
+        double wi = ot->vor.weights[i];
+
+        double gi = integral - wi * area + lambda * wi;
+        fx -= gi; //lbfgs minimizes --> we want to maximize
+        g[i] = area - lambda; //gradient
     }
-    fx += sum;
+    
 
     return fx;
 }
@@ -569,9 +577,22 @@ int main() {
 
 
     v.compute();
-
+    /*
     save_svg(v.cells, "voronoi.svg", &v.points, "none");
+    */
 
+    OptimalTransport ot;
+
+    ot.vor.points.push_back(Vector(0.1, 0.2));
+    ot.vor.points.push_back(Vector(0.6, 0.4));
+    ot.vor.points.push_back(Vector(0.5, 0.7));
+    ot.vor.points.push_back(Vector(0.2, 0.5));
+
+    ot.vor.weights.resize(ot.vor.points.size(), 0.0);
+
+    ot.optimize();
+    save_frame(ot.vor.cells, "lab2");
+    save_svg(ot.vor.cells, "lab2.svg", &ot.vor.points, "white");
     return 0;
 }
 
