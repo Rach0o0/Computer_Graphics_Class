@@ -642,6 +642,7 @@ public:
 
         //if need more particles
         while (count < N_particles){
+            //RAND_MAX -> biggest value that can be sent back
             double x = center_x + radius  * (2.0 * ((double)rand() / RAND_MAX) - 1.0);
             double y = center_y + radius * (2.0 * ((double)rand() / RAND_MAX)- 1.0);
 
