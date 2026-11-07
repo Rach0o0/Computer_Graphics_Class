@@ -1,6 +1,6 @@
 # Computer Graphics in C++ (École Polytechnique)
 
-Four graphics assignments written from scratch in C++ during the Computer Graphics course at École Polytechnique: a path tracer, color transfer with optimal transport, a **2D free surface fluid simulation based on semi discrete optimal transport**, and mesh parameterization.
+Four graphics assignments written in C++ during the Computer Graphics course at École Polytechnique: a path tracer, color transfer with optimal transport, a 2D free surface fluid simulation based on semi discrete optimal transport, and mesh parameterization.
 
 Author: **Rachid Tazi** · [Portfolio](https://rach0o0.github.io) · [LinkedIn](https://www.linkedin.com/in/rachid-tazi/)
 
